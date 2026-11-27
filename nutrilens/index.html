@@ -6,7 +6,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="NutriLens AI">
-    <title>NutriLens AI - 食事・カロリー管理</title>
+    <title>NutriLens AI - 食事・カロリー管理（クラウド同期版）</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -40,11 +40,17 @@
                     <i data-lucide="utensils" class="w-4 h-4"></i>
                 </div>
                 <div>
-                    <h1 class="font-bold text-base tracking-tight text-slate-900 leading-none">NutriLens AI</h1>
+                    <div class="flex items-center gap-1.5">
+                        <h1 class="font-bold text-base tracking-tight text-slate-900 leading-none">NutriLens AI</h1>
+                        <span id="syncStatusBadge" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 font-semibold">未連携</span>
+                    </div>
                     <p id="activeModelBadge" class="text-[10px] text-emerald-600 font-medium mt-0.5">model: gemini-3.5-flash-lite</p>
                 </div>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5">
+                <button onclick="syncFromCloud(true)" id="manualSyncBtn" class="p-2 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition" title="スプレッドシートと再同期">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                </button>
                 <button onclick="openSettingsModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition">
                     <i data-lucide="settings" class="w-3.5 h-3.5"></i>
                     <span>API・設定</span>
@@ -72,6 +78,20 @@
     </header>
 
     <main class="max-w-5xl mx-auto px-4 pt-5 space-y-6">
+
+        <!-- Cloud Setup Warning Banner -->
+        <div id="gasWarningBanner" class="hidden bg-amber-50 border border-amber-200 rounded-2xl p-3.5 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5 text-xs text-amber-900">
+                <i data-lucide="cloud-off" class="w-5 h-5 text-amber-600 shrink-0"></i>
+                <div>
+                    <p class="font-bold">Googleスプレッドシート連携が未設定です</p>
+                    <p class="text-amber-700 mt-0.5">現在はブラウザ内に一時保存されています。「API・設定」からウェブアプリURLを登録すると全端末で永続同期されます。</p>
+                </div>
+            </div>
+            <button onclick="openSettingsModal()" class="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-bold shrink-0 hover:bg-amber-700">
+                設定する
+            </button>
+        </div>
 
         <!-- Daily Summary Dashboard -->
         <section class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200/80">
@@ -113,8 +133,8 @@
         <!-- Main Input & Result Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-            <!-- Left Column: Input Section (Photo AI or Manual Entry) -->
-            <section class="lg:col-span-6 bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200/80 space-y-4">
+            <!-- Left Column: Input Section -->
+            <section class="lg:col-span-5 bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200/80 space-y-4 h-fit">
                 
                 <!-- Mode Switch Tabs -->
                 <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl">
@@ -141,21 +161,19 @@
 
                 <!-- MODE 1: PHOTO AI INPUT -->
                 <div id="photoModeArea" class="space-y-4">
-                    <!-- Separate Inputs for Camera vs Photo Library -->
                     <input type="file" id="cameraInput" accept="image/*" capture="environment" class="hidden" onchange="handleImageUpload(event)">
                     <input type="file" id="galleryInput" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
 
-                    <!-- Image Preview / Dropzone -->
-                    <div id="dropZone" class="relative border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 min-h-[200px] flex flex-col items-center justify-center p-4 text-center overflow-hidden">
-                        <img id="imagePreview" class="hidden max-h-64 w-auto rounded-lg object-contain shadow-sm" alt="食事プレビュー">
+                    <div id="dropZone" class="relative border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 min-h-[190px] flex flex-col items-center justify-center p-4 text-center overflow-hidden">
+                        <img id="imagePreview" class="hidden max-h-60 w-auto rounded-lg object-contain shadow-sm" alt="食事プレビュー">
                         
-                        <div id="uploadPlaceholder" class="space-y-3">
-                            <div class="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
-                                <i data-lucide="image-plus" class="w-6 h-6"></i>
+                        <div id="uploadPlaceholder" class="space-y-2.5">
+                            <div class="w-11 h-11 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                                <i data-lucide="image-plus" class="w-5 h-5"></i>
                             </div>
                             <div class="text-xs text-slate-500">
                                 <p class="font-semibold text-slate-700 text-sm">食事の写真を撮影または選択</p>
-                                <p class="mt-0.5">箸や茶碗と一緒に撮ると分量精度が向上します</p>
+                                <p class="mt-0.5">複数の料理が写っていても品目ごとに自動分割します</p>
                             </div>
                         </div>
 
@@ -164,7 +182,6 @@
                         </button>
                     </div>
 
-                    <!-- Dedicated Action Buttons (Camera vs Gallery) -->
                     <div class="grid grid-cols-2 gap-2.5">
                         <button type="button" onclick="document.getElementById('cameraInput').click()" class="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-900 text-white text-xs sm:text-sm font-bold shadow-sm transition">
                             <i data-lucide="camera" class="w-4 h-4"></i>
@@ -176,16 +193,14 @@
                         </button>
                     </div>
 
-                    <!-- Optional Context Note -->
                     <div>
                         <label class="block text-xs font-bold text-slate-600 mb-1">補足メモ（任意）</label>
                         <input type="text" id="photoContextNote" placeholder="例：ご飯は半分残した、ドレッシング抜き、鶏むね肉200g" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
                     </div>
 
-                    <!-- Analyze Button -->
                     <button id="analyzeBtn" onclick="analyzeFoodImage()" class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition">
                         <i data-lucide="sparkles" class="w-4 h-4"></i>
-                        <span>AIで栄養・カロリーを解析する</span>
+                        <span>AIで料理ごとに解析する</span>
                     </button>
                 </div>
 
@@ -227,7 +242,7 @@
                         <input type="text" id="manualMemo" placeholder="例：コンビニで購入、間食プロテインバー" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
                     </div>
 
-                    <button type="button" onclick="saveManualMeal()" class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition">
+                    <button type="button" id="saveManualBtn" onclick="saveManualMeal()" class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition">
                         <i data-lucide="plus-circle" class="w-4 h-4"></i>
                         <span>この内容で記録に保存する</span>
                     </button>
@@ -238,81 +253,98 @@
             </section>
 
             <!-- Right Column: AI Analysis Result Section -->
-            <section class="lg:col-span-6 bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200/80 flex flex-col justify-between">
+            <section class="lg:col-span-7 bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200/80 flex flex-col justify-between">
                 
                 <!-- Loading State -->
-                <div id="loadingState" class="hidden flex-1 flex flex-col items-center justify-center py-12 text-center space-y-3">
+                <div id="loadingState" class="hidden flex-1 flex flex-col items-center justify-center py-14 text-center space-y-3">
                     <div class="w-10 h-10 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
-                    <p id="loadingText" class="text-sm font-bold text-slate-700">AIが食事内容を解析しています...</p>
-                    <p class="text-xs text-slate-400">食材の推定と栄養素の計算を実行中</p>
+                    <p id="loadingText" class="text-sm font-bold text-slate-700">AIが料理ごとに分解・解析しています...</p>
+                    <p class="text-xs text-slate-400">品目ごとのカロリーとPFCバランスを計算中</p>
                 </div>
 
                 <!-- Empty Result Placeholder -->
-                <div id="emptyResultState" class="flex-1 flex flex-col items-center justify-center py-12 text-center text-slate-400 space-y-2">
-                    <i data-lucide="pie-chart" class="w-10 h-10 text-slate-300"></i>
-                    <p class="text-sm font-bold text-slate-600">解析結果がここに表示されます</p>
-                    <p class="text-xs max-w-xs">写真を撮影・選択して解析を実行すると、推定カロリーとPFCバランス・食材内訳が表示されます。</p>
+                <div id="emptyResultState" class="flex-1 flex flex-col items-center justify-center py-14 text-center text-slate-400 space-y-2">
+                    <i data-lucide="layers" class="w-10 h-10 text-slate-300"></i>
+                    <p class="text-sm font-bold text-slate-600">解析結果がここに料理ごとに表示されます</p>
+                    <p class="text-xs max-w-sm">解析後、品目ごとに「0.8人前」などの量調整や、料理名・数値の直接修正をしてから個別に保存できます。</p>
                 </div>
 
                 <!-- Active Analysis Result -->
                 <div id="resultContent" class="hidden space-y-4">
-                    <div class="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
                         <div>
-                            <span id="resMealBadge" class="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 mb-1">夕食</span>
-                            <input type="text" id="resDishName" class="block w-full font-bold text-lg text-slate-900 bg-transparent border-b border-dashed border-slate-300 focus:border-emerald-500 focus:outline-none pb-0.5" title="料理名を直接編集できます">
+                            <div class="flex items-center gap-2">
+                                <span id="resMealBadge" class="inline-block px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">夕食</span>
+                                <span class="text-xs font-bold text-slate-500">認識された料理（<span id="detectedItemCount">0</span>品）</span>
+                            </div>
+                            <input type="text" id="resSetTitle" class="mt-1 block w-full font-bold text-base text-slate-800 bg-transparent border-b border-dashed border-slate-300 focus:border-emerald-500 focus:outline-none pb-0.5" placeholder="食事セット名">
                         </div>
-                        <div class="text-right shrink-0">
-                            <div class="text-2xl font-extrabold text-emerald-600"><span id="resCalories">0</span> <span class="text-xs font-semibold text-slate-500">kcal</span></div>
+                        <div class="text-right">
+                            <div class="text-[11px] font-semibold text-slate-400">合計カロリー</div>
+                            <div class="text-2xl font-extrabold text-emerald-600"><span id="resTotalCalories">0</span> <span class="text-xs font-semibold text-slate-500">kcal</span></div>
                         </div>
                     </div>
 
-                    <!-- Portion Multiplier -->
-                    <div>
+                    <!-- Global Portion Multiplier -->
+                    <div class="bg-slate-50 rounded-xl p-3 border border-slate-200/70">
                         <div class="flex items-center justify-between text-xs mb-1.5">
-                            <span class="font-bold text-slate-600">食べた量の微調整</span>
-                            <span id="portionLabel" class="font-bold text-emerald-600">標準 (1.0倍)</span>
+                            <span class="font-bold text-slate-700">全体の食べる量を一括調整</span>
+                            <span id="globalPortionLabel" class="font-bold text-emerald-600">標準 (1.0人前)</span>
                         </div>
                         <div class="grid grid-cols-5 gap-1.5">
-                            <button type="button" onclick="applyMultiplier(0.5)" class="mult-btn py-1.5 rounded-lg text-xs font-semibold border border-slate-200 hover:bg-slate-50" data-mult="0.5">半分 0.5x</button>
-                            <button type="button" onclick="applyMultiplier(0.8)" class="mult-btn py-1.5 rounded-lg text-xs font-semibold border border-slate-200 hover:bg-slate-50" data-mult="0.8">少なめ 0.8x</button>
-                            <button type="button" onclick="applyMultiplier(1.0)" class="mult-btn py-1.5 rounded-lg text-xs font-bold border-emerald-500 bg-emerald-50 text-emerald-700" data-mult="1">標準 1.0x</button>
-                            <button type="button" onclick="applyMultiplier(1.2)" class="mult-btn py-1.5 rounded-lg text-xs font-semibold border border-slate-200 hover:bg-slate-50" data-mult="1.2">多め 1.2x</button>
-                            <button type="button" onclick="applyMultiplier(1.5)" class="mult-btn py-1.5 rounded-lg text-xs font-semibold border border-slate-200 hover:bg-slate-50" data-mult="1.5">大盛 1.5x</button>
+                            <button type="button" onclick="applyGlobalMultiplier(0.5)" class="g-mult-btn py-1.5 rounded-lg text-xs font-semibold border border-slate-200 bg-white hover:bg-slate-100" data-mult="0.5">0.5人前</button>
+                            <button type="button" onclick="applyGlobalMultiplier(0.8)" class="g-mult-btn py-1.5 rounded-lg text-xs font-semibold border border-slate-200 bg-white hover:bg-slate-100" data-mult="0.8">0.8人前</button>
+                            <button type="button" onclick="applyGlobalMultiplier(1.0)" class="g-mult-btn py-1.5 rounded-lg text-xs font-bold border-emerald-500 bg-emerald-50 text-emerald-700" data-mult="1">1.0人前</button>
+                            <button type="button" onclick="applyGlobalMultiplier(1.2)" class="g-mult-btn py-1.5 rounded-lg text-xs font-semibold border border-slate-200 bg-white hover:bg-slate-100" data-mult="1.2">1.2人前</button>
+                            <button type="button" onclick="applyGlobalMultiplier(1.5)" class="g-mult-btn py-1.5 rounded-lg text-xs font-semibold border border-slate-200 bg-white hover:bg-slate-100" data-mult="1.5">1.5人前</button>
                         </div>
                     </div>
 
-                    <!-- PFC Chart & Values -->
-                    <div class="grid grid-cols-12 gap-3 items-center bg-slate-50 rounded-xl p-3">
-                        <div class="col-span-5 h-28 flex items-center justify-center">
+                    <!-- Itemized Editable Dishes List -->
+                    <div class="space-y-2.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-slate-700">料理ごとの内訳（名前・量・数値を直接修正可能）</span>
+                            <button type="button" onclick="addBlankDetectedItem()" class="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
+                                <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                                <span>品目を追加</span>
+                            </button>
+                        </div>
+
+                        <div id="detectedItemsContainer" class="space-y-2.5 max-h-[380px] overflow-y-auto pr-1"></div>
+                    </div>
+
+                    <!-- PFC Chart & Total Values -->
+                    <div class="grid grid-cols-12 gap-3 items-center bg-slate-50 rounded-xl p-3 border border-slate-200/60">
+                        <div class="col-span-4 sm:col-span-5 h-24 flex items-center justify-center">
                             <canvas id="pfcChart"></canvas>
                         </div>
-                        <div class="col-span-7 space-y-1.5 text-xs">
+                        <div class="col-span-8 sm:col-span-7 space-y-1 text-xs">
                             <div class="flex justify-between items-center">
                                 <span class="flex items-center gap-1.5 font-semibold text-slate-700"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>タンパク質 (P)</span>
-                                <span class="font-bold text-slate-900"><span id="resP">0</span> g</span>
+                                <span class="font-bold text-slate-900"><span id="resTotalP">0</span> g</span>
                             </div>
                             <div class="flex justify-between items-center">
                                 <span class="flex items-center gap-1.5 font-semibold text-slate-700"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>脂質 (F)</span>
-                                <span class="font-bold text-slate-900"><span id="resF">0</span> g</span>
+                                <span class="font-bold text-slate-900"><span id="resTotalF">0</span> g</span>
                             </div>
                             <div class="flex justify-between items-center">
                                 <span class="flex items-center gap-1.5 font-semibold text-slate-700"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>炭水化物 (C)</span>
-                                <span class="font-bold text-slate-900"><span id="resC">0</span> g</span>
+                                <span class="font-bold text-slate-900"><span id="resTotalC">0</span> g</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Ingredients Breakdown -->
-                    <div>
-                        <h4 class="text-xs font-bold text-slate-600 mb-1.5">推定された食材・内訳</h4>
-                        <ul id="resIngredientsList" class="space-y-1 text-xs text-slate-600 bg-slate-50 rounded-xl p-3 max-h-36 overflow-y-auto"></ul>
+                    <!-- Save Buttons -->
+                    <div class="space-y-2 pt-1">
+                        <button type="button" id="saveIndivBtn" onclick="saveAnalyzedItemsIndividually()" class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition">
+                            <i data-lucide="list-checks" class="w-4 h-4"></i>
+                            <span>料理ごとに分けて記録に保存する（おすすめ）</span>
+                        </button>
+                        <button type="button" id="saveCombBtn" onclick="saveAnalyzedItemsCombined()" class="w-full py-2 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                            <i data-lucide="package" class="w-3.5 h-3.5"></i>
+                            <span>全体を1つのセットとしてまとめて保存する</span>
+                        </button>
                     </div>
-
-                    <!-- Save to History Button -->
-                    <button type="button" onclick="saveAnalyzedMeal()" class="w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition">
-                        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
-                        <span>この食事を履歴に保存する</span>
-                    </button>
                 </div>
             </section>
         </div>
@@ -327,20 +359,18 @@
                 <span id="historyCountBadge" class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600">0件</span>
             </div>
 
-            <div id="mealHistoryList" class="space-y-3">
-                <!-- Meal cards rendered here -->
-            </div>
+            <div id="mealHistoryList" class="space-y-3"></div>
         </section>
 
     </main>
 
-    <!-- EDIT MEAL MODAL -->
+    <!-- EDIT SAVED MEAL MODAL -->
     <div id="editModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
                     <i data-lucide="edit-3" class="w-4 h-4 text-emerald-600"></i>
-                    <span>食事記録の編集</span>
+                    <span>保存済み記録の編集・量調整</span>
                 </h3>
                 <button onclick="closeEditModal()" class="text-slate-400 hover:text-slate-600 p-1">
                     <i data-lucide="x" class="w-5 h-5"></i>
@@ -371,6 +401,16 @@
                     <input type="text" id="editName" class="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 </div>
 
+                <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                    <div class="text-[11px] font-bold text-slate-600 mb-1.5">現在の数値から量（倍率）を変更する</div>
+                    <div class="grid grid-cols-4 gap-1.5">
+                        <button type="button" onclick="scaleEditValues(0.5)" class="py-1 rounded bg-white border border-slate-200 hover:bg-emerald-50 text-xs font-semibold">0.5倍</button>
+                        <button type="button" onclick="scaleEditValues(0.8)" class="py-1 rounded bg-white border border-slate-200 hover:bg-emerald-50 text-xs font-semibold">0.8倍</button>
+                        <button type="button" onclick="scaleEditValues(1.2)" class="py-1 rounded bg-white border border-slate-200 hover:bg-emerald-50 text-xs font-semibold">1.2倍</button>
+                        <button type="button" onclick="scaleEditValues(1.5)" class="py-1 rounded bg-white border border-slate-200 hover:bg-emerald-50 text-xs font-semibold">1.5倍</button>
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-xs font-bold text-slate-600 mb-1">カロリー (kcal)</label>
@@ -398,7 +438,7 @@
 
             <div class="flex gap-2 pt-2">
                 <button type="button" onclick="closeEditModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50">キャンセル</button>
-                <button type="button" onclick="saveEditedMeal()" class="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700">変更を保存</button>
+                <button type="button" id="saveEditBtn" onclick="saveEditedMeal()" class="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700">変更を保存</button>
             </div>
         </div>
     </div>
@@ -409,7 +449,7 @@
             <div class="flex items-center justify-between border-b border-slate-100 pb-3">
                 <h3 class="font-bold text-base text-slate-900 flex items-center gap-2">
                     <i data-lucide="settings" class="w-4 h-4 text-emerald-600"></i>
-                    <span>APIキー・モデル・目標設定</span>
+                    <span>APIキー・クラウド同期・目標設定</span>
                 </h3>
                 <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-600 p-1">
                     <i data-lucide="x" class="w-5 h-5"></i>
@@ -417,16 +457,29 @@
             </div>
 
             <div class="space-y-4">
-                <!-- API Key -->
+                <!-- Google Apps Script URL -->
+                <div class="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2">
+                    <label class="block text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                        <i data-lucide="sheet" class="w-4 h-4 text-emerald-700"></i>
+                        <span>Googleスプレッドシート連携 URL（永続保存）</span>
+                    </label>
+                    <input type="url" id="gasUrlInput" placeholder="https://script.google.com/macros/s/....../exec" class="w-full px-3 py-2 text-xs border border-emerald-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    <p class="text-[11px] text-emerald-800 leading-relaxed">
+                        Apps Scriptで発行した「ウェブアプリURL」を入力すると、記録がGoogleスプレッドシートに自動保存され、iPhone・Mac間で完全に共有されます。
+                    </p>
+                    <button type="button" onclick="migrateLocalToCloud()" id="migrateBtn" class="w-full py-2 px-3 rounded-lg bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold flex items-center justify-center gap-1.5 transition">
+                        <i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i>
+                        <span>ブラウザ内の既存記録をスプレッドシートへ移行</span>
+                    </button>
+                </div>
+
+                <!-- Gemini API Key -->
                 <div>
                     <label class="block text-xs font-bold text-slate-700 mb-1">Google Gemini APIキー</label>
                     <input type="password" id="apiKeyInput" placeholder="AIzaSy..." class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
-                    <p class="text-[11px] text-slate-500 mt-1">
-                        キーはブラウザ内（localStorage）にのみ保存されます。取得は <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-emerald-600 underline font-semibold">Google AI Studio</a> から可能です。
-                    </p>
                 </div>
 
-                <!-- Model Selection (Strictly Persisted) -->
+                <!-- Model Selection -->
                 <div class="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2.5">
                     <div class="flex items-center justify-between">
                         <label class="block text-xs font-bold text-slate-700">使用するAIモデル（固定）</label>
@@ -456,9 +509,9 @@
                     <input type="number" id="goalCalInput" placeholder="2000" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 </div>
 
-                <!-- Data Backup / Restore -->
+                <!-- Backup / Restore -->
                 <div class="pt-2 border-t border-slate-100 space-y-2">
-                    <label class="block text-xs font-bold text-slate-700">データのバックアップ・復元</label>
+                    <label class="block text-xs font-bold text-slate-700">JSONバックアップ・復元</label>
                     <div class="grid grid-cols-2 gap-2">
                         <button type="button" onclick="exportData()" class="py-2 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5">
                             <i data-lucide="download" class="w-3.5 h-3.5"></i>
@@ -483,6 +536,7 @@
         // --- Storage Keys ---
         const STORAGE_KEYS = {
             API_KEY: 'nutrilens_api_key',
+            GAS_URL: 'nutrilens_gas_webapp_url',
             MODEL: 'nutrilens_selected_model',
             CUSTOM_MODELS: 'nutrilens_custom_model_list',
             GOAL_CAL: 'nutrilens_goal_cal',
@@ -493,25 +547,28 @@
         let selectedDate = getTodayString();
         let selectedMealType = getDefaultMealTypeByTime();
         let currentBase64Image = null;
-        let currentThumbnailBase64 = null;
-        let baseAnalysisData = null;
-        let currentMultiplier = 1.0;
+        let detectedItems = [];
+        let allRecordsCache = [];
         let pfcChartInstance = null;
 
         // --- Initialization ---
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             lucide.createIcons();
             
             document.getElementById('currentDateInput').value = selectedDate;
             selectMealType(selectedMealType);
 
-            // Strictly preserve user's model choice
             const savedModel = localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-3.5-flash-lite';
             localStorage.setItem(STORAGE_KEYS.MODEL, savedModel);
             updateModelBadge(savedModel);
 
             restoreFetchedModelOptions();
+            cleanLegacyLocalThumbnails();
+
+            allRecordsCache = getLocalRecords();
             renderDailyView();
+
+            await syncFromCloud(false);
         });
 
         function getTodayString() {
@@ -533,6 +590,160 @@
         function updateModelBadge(modelName) {
             const badge = document.getElementById('activeModelBadge');
             if (badge) badge.textContent = `model: ${modelName}`;
+        }
+
+        function cleanLegacyLocalThumbnails() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEYS.RECORDS);
+                if (!raw) return;
+                const arr = JSON.parse(raw);
+                if (Array.isArray(arr)) {
+                    let changed = false;
+                    const cleaned = arr.map(r => {
+                        if (r.thumbnail) {
+                            changed = true;
+                            const copy = { ...r };
+                            delete copy.thumbnail;
+                            return copy;
+                        }
+                        return r;
+                    });
+                    if (changed) {
+                        localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(cleaned));
+                    }
+                }
+            } catch {}
+        }
+
+        // --- Google Sheets Cloud Sync Functions ---
+        function getGasUrl() {
+            return (localStorage.getItem(STORAGE_KEYS.GAS_URL) || '').trim();
+        }
+
+        function setSyncBadge(state, text) {
+            const badge = document.getElementById('syncStatusBadge');
+            const banner = document.getElementById('gasWarningBanner');
+            if (!badge) return;
+
+            if (state === 'unconfigured') {
+                badge.textContent = 'ローカル保存';
+                badge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold';
+                if (banner) banner.classList.remove('hidden');
+            } else if (state === 'syncing') {
+                badge.textContent = text || '同期中...';
+                badge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold';
+                if (banner) banner.classList.add('hidden');
+            } else if (state === 'synced') {
+                badge.textContent = text || 'シート同期済';
+                badge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 font-semibold';
+                if (banner) banner.classList.add('hidden');
+            } else if (state === 'error') {
+                badge.textContent = '同期エラー';
+                badge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 font-semibold';
+                if (banner) banner.classList.add('hidden');
+            }
+        }
+
+        async function syncFromCloud(showAlertOnError = false) {
+            const gasUrl = getGasUrl();
+            if (!gasUrl) {
+                setSyncBadge('unconfigured');
+                return;
+            }
+
+            setSyncBadge('syncing', '読込中...');
+            try {
+                const res = await fetch(gasUrl, { method: 'GET' });
+                const data = await res.json();
+                if (data.status === 'ok' && Array.isArray(data.records)) {
+                    allRecordsCache = data.records;
+                    saveLocalRecords(allRecordsCache);
+                    renderDailyView();
+                    setSyncBadge('synced', 'シート同期済');
+                } else {
+                    throw new Error(data.message || 'データの取得に失敗しました');
+                }
+            } catch (err) {
+                setSyncBadge('error');
+                if (showAlertOnError) {
+                    showError(`スプレッドシート同期エラー: ${err.message}`);
+                }
+            }
+        }
+
+        async function postToCloud(payload) {
+            const gasUrl = getGasUrl();
+            if (!gasUrl) return false;
+
+            setSyncBadge('syncing', '保存中...');
+            try {
+                const res = await fetch(gasUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (data.status !== 'ok') {
+                    throw new Error(data.message || 'スプレッドシートへの書き込みに失敗しました');
+                }
+                setSyncBadge('synced', 'シート同期済');
+                return true;
+            } catch (err) {
+                setSyncBadge('error');
+                showError(`クラウド保存エラー: ${err.message}`);
+                return false;
+            }
+        }
+
+        async function migrateLocalToCloud() {
+            const gasUrl = document.getElementById('gasUrlInput').value.trim() || getGasUrl();
+            if (!gasUrl) {
+                alert('先に上の欄にGoogleスプレッドシート連携URL（ウェブアプリURL）を入力してください。');
+                return;
+            }
+            localStorage.setItem(STORAGE_KEYS.GAS_URL, gasUrl);
+
+            const localItems = getLocalRecords();
+            if (localItems.length === 0) {
+                alert('ブラウザ内に移行対象の記録がありません。');
+                return;
+            }
+
+            if (!confirm(`ブラウザ内に保存されている ${localItems.length} 件の記録をGoogleスプレッドシートへ送信しますか？`)) {
+                return;
+            }
+
+            const btn = document.getElementById('migrateBtn');
+            btn.disabled = true;
+            btn.textContent = '移行中...';
+
+            const ok = await postToCloud({ action: 'add', records: localItems });
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i><span>ブラウザ内の既存記録をスプレッドシートへ移行</span>';
+            lucide.createIcons();
+
+            if (ok) {
+                await syncFromCloud(true);
+                alert(`${localItems.length} 件の記録をスプレッドシートへ移行しました！`);
+            }
+        }
+
+        // --- Local Storage Cache Helpers ---
+        function getLocalRecords() {
+            try {
+                return JSON.parse(localStorage.getItem(STORAGE_KEYS.RECORDS)) || [];
+            } catch {
+                return [];
+            }
+        }
+
+        function saveLocalRecords(records) {
+            try {
+                const slim = records.map(({ thumbnail, ...rest }) => rest);
+                localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(slim));
+            } catch (e) {
+                console.warn('Local cache save skipped:', e);
+            }
         }
 
         // --- Date Navigation ---
@@ -607,7 +818,6 @@
                 const img = new Image();
                 img.onload = function() {
                     currentBase64Image = resizeImage(img, 1024, 0.82);
-                    currentThumbnailBase64 = resizeImage(img, 240, 0.65);
 
                     const preview = document.getElementById('imagePreview');
                     preview.src = `data:image/jpeg;base64,${currentBase64Image}`;
@@ -643,7 +853,6 @@
 
         function clearImage() {
             currentBase64Image = null;
-            currentThumbnailBase64 = null;
             document.getElementById('imagePreview').classList.add('hidden');
             document.getElementById('imagePreview').src = '';
             document.getElementById('uploadPlaceholder').classList.remove('hidden');
@@ -693,21 +902,26 @@
             hideError();
 
             const note = document.getElementById('photoContextNote').value.trim();
-            const prompt = `あなたはプロの栄養士です。この食事の写真を解析し、以下のJSONスキーマのみで出力してください。
+            const prompt = `あなたはプロの栄養士です。この食事の写真に写っている料理・食品を「料理（品目）ごと」に個別に分割して認識し、それぞれの推定分量・カロリー・PFC（タンパク質・脂質・炭水化物）をJSON形式で出力してください。
+例えば定食や食卓の写真であれば「ご飯」「味噌汁」「主菜」「副菜」のように個別の料理単位に分けてください。
 補足情報: ${note || 'なし'}
+
 出力JSON形式:
 {
-  "dish_name": "料理名（日本語で簡潔に）",
-  "calories": 数値(kcal),
-  "protein": 数値(g),
-  "fat": 数値(g),
-  "carbs": 数値(g),
-  "ingredients": [
-    {"name": "食材・料理名と推定分量(例: 白米 150g)", "calories": 数値}
+  "meal_title": "全体の食事名（例: 焼き魚定食）",
+  "dishes": [
+    {
+      "name": "料理名（例: 白米、サバの塩焼き、味噌汁）",
+      "amount_desc": "推定分量（例: 茶碗1杯 150g、1切れ 120g）",
+      "calories": 数値(kcal),
+      "protein": 数値(g),
+      "fat": 数値(g),
+      "carbs": 数値(g)
+    }
   ]
 }`;
 
-            setLoading(true, `${localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-3.5-flash-lite'} で解析中...`);
+            setLoading(true, `${localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-3.5-flash-lite'} で料理ごとに解析中...`);
 
             try {
                 const result = await callGeminiAPI([
@@ -715,17 +929,41 @@
                     { inlineData: { mimeType: 'image/jpeg', data: currentBase64Image } }
                 ]);
 
-                baseAnalysisData = {
-                    dish_name: result.dish_name || '解析された食事',
-                    calories: Number(result.calories) || 0,
-                    protein: Number(result.protein) || 0,
-                    fat: Number(result.fat) || 0,
-                    carbs: Number(result.carbs) || 0,
-                    ingredients: Array.isArray(result.ingredients) ? result.ingredients : []
-                };
+                const dishes = Array.isArray(result.dishes) ? result.dishes : [];
+                detectedItems = dishes.map((d, index) => ({
+                    id: `item_${Date.now()}_${index}`,
+                    name: d.name || `料理 ${index + 1}`,
+                    amountDesc: d.amount_desc || '1人前',
+                    baseCal: Number(d.calories) || 0,
+                    baseP: Number(d.protein) || 0,
+                    baseF: Number(d.fat) || 0,
+                    baseC: Number(d.carbs) || 0,
+                    ratio: 1.0
+                }));
 
-                currentMultiplier = 1.0;
-                displayAnalysisResult();
+                if (detectedItems.length === 0) {
+                    detectedItems.push({
+                        id: `item_${Date.now()}_0`,
+                        name: result.meal_title || '認識された食事',
+                        amountDesc: '1人前',
+                        baseCal: 0,
+                        baseP: 0,
+                        baseF: 0,
+                        baseC: 0,
+                        ratio: 1.0
+                    });
+                }
+
+                document.getElementById('resSetTitle').value = result.meal_title || detectedItems.map(i => i.name).join('・');
+                document.getElementById('resMealBadge').textContent = selectedMealType;
+                
+                updateGlobalMultiplierButtons(1.0);
+                document.getElementById('globalPortionLabel').textContent = '標準 (1.0人前)';
+
+                document.getElementById('emptyResultState').classList.add('hidden');
+                document.getElementById('resultContent').classList.remove('hidden');
+
+                renderDetectedItems();
             } catch (err) {
                 showError(err.message);
             } finally {
@@ -733,6 +971,178 @@
             }
         }
 
+        // --- Itemized Dish Rendering, Editing, and Portion Scaling ---
+        function renderDetectedItems() {
+            const container = document.getElementById('detectedItemsContainer');
+            container.innerHTML = '';
+            document.getElementById('detectedItemCount').textContent = detectedItems.length;
+
+            detectedItems.forEach((item, idx) => {
+                const currentCal = Math.round(item.baseCal * item.ratio);
+                const currentP = Number((item.baseP * item.ratio).toFixed(1));
+                const currentF = Number((item.baseF * item.ratio).toFixed(1));
+                const currentC = Number((item.baseC * item.ratio).toFixed(1));
+
+                const card = document.createElement('div');
+                card.className = 'p-3 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2.5';
+
+                const ratios = [0.5, 0.8, 1.0, 1.2, 1.5];
+                const ratioButtonsHTML = ratios.map(r => {
+                    const isActive = Math.abs(item.ratio - r) < 0.01;
+                    const cls = isActive
+                        ? 'bg-emerald-600 text-white border-emerald-600 font-bold'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100 font-medium';
+                    return `<button type="button" onclick="setItemRatio(${idx}, ${r})" class="py-1 px-1.5 rounded text-[11px] border ${cls} transition">${r}人前</button>`;
+                }).join('');
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between gap-2">
+                        <div class="flex-1 flex items-center gap-1.5">
+                            <span class="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold flex items-center justify-center shrink-0">${idx + 1}</span>
+                            <input type="text" value="${escapeHtml(item.name)}" onchange="updateItemName(${idx}, this.value)" class="w-full font-bold text-sm text-slate-900 bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="料理名">
+                        </div>
+                        <button type="button" onclick="removeDetectedItem(${idx})" class="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition" title="この品目を削除">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                        <span>AI推定目安: ${escapeHtml(item.amountDesc)}</span>
+                        <div class="flex items-center gap-1">
+                            <span>量調整:</span>
+                            <div class="flex gap-1">${ratioButtonsHTML}</div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-2 pt-1">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 mb-0.5">カロリー(kcal)</label>
+                            <input type="number" inputmode="decimal" value="${currentCal}" onchange="updateItemDirectValue(${idx}, 'cal', this.value)" class="w-full px-2 py-1 text-xs font-bold text-emerald-700 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-blue-600 mb-0.5">P (g)</label>
+                            <input type="number" step="0.1" inputmode="decimal" value="${currentP}" onchange="updateItemDirectValue(${idx}, 'p', this.value)" class="w-full px-2 py-1 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-amber-600 mb-0.5">F (g)</label>
+                            <input type="number" step="0.1" inputmode="decimal" value="${currentF}" onchange="updateItemDirectValue(${idx}, 'f', this.value)" class="w-full px-2 py-1 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-emerald-600 mb-0.5">C (g)</label>
+                            <input type="number" step="0.1" inputmode="decimal" value="${currentC}" onchange="updateItemDirectValue(${idx}, 'c', this.value)" class="w-full px-2 py-1 text-xs font-semibold text-slate-800 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+
+            lucide.createIcons();
+            recalculateAnalysisTotals();
+        }
+
+        function setItemRatio(idx, ratio) {
+            if (!detectedItems[idx]) return;
+            detectedItems[idx].ratio = ratio;
+            renderDetectedItems();
+        }
+
+        function applyGlobalMultiplier(mult) {
+            detectedItems.forEach(item => {
+                item.ratio = mult;
+            });
+            updateGlobalMultiplierButtons(mult);
+            document.getElementById('globalPortionLabel').textContent = `全体一括 (${mult}人前)`;
+            renderDetectedItems();
+        }
+
+        function updateGlobalMultiplierButtons(activeMult) {
+            document.querySelectorAll('.g-mult-btn').forEach(btn => {
+                if (Math.abs(Number(btn.dataset.mult) - activeMult) < 0.01) {
+                    btn.className = 'g-mult-btn py-1.5 rounded-lg text-xs font-bold border border-emerald-500 bg-emerald-50 text-emerald-700';
+                } else {
+                    btn.className = 'g-mult-btn py-1.5 rounded-lg text-xs font-semibold border border-slate-200 bg-white hover:bg-slate-100 text-slate-600';
+                }
+            });
+        }
+
+        function updateItemName(idx, newName) {
+            if (!detectedItems[idx]) return;
+            detectedItems[idx].name = newName.trim() || '名称未設定';
+        }
+
+        function updateItemDirectValue(idx, field, val) {
+            if (!detectedItems[idx]) return;
+            const num = Number(val) || 0;
+            const ratio = detectedItems[idx].ratio || 1.0;
+            if (field === 'cal') detectedItems[idx].baseCal = num / ratio;
+            if (field === 'p') detectedItems[idx].baseP = num / ratio;
+            if (field === 'f') detectedItems[idx].baseF = num / ratio;
+            if (field === 'c') detectedItems[idx].baseC = num / ratio;
+            recalculateAnalysisTotals();
+        }
+
+        function removeDetectedItem(idx) {
+            detectedItems.splice(idx, 1);
+            renderDetectedItems();
+        }
+
+        function addBlankDetectedItem() {
+            detectedItems.push({
+                id: `item_${Date.now()}_${detectedItems.length}`,
+                name: '追加した料理',
+                amountDesc: '手入力追加',
+                baseCal: 100,
+                baseP: 5.0,
+                baseF: 3.0,
+                baseC: 12.0,
+                ratio: 1.0
+            });
+            renderDetectedItems();
+        }
+
+        function recalculateAnalysisTotals() {
+            let totalCal = 0, totalP = 0, totalF = 0, totalC = 0;
+            detectedItems.forEach(item => {
+                totalCal += Math.round(item.baseCal * item.ratio);
+                totalP += Number((item.baseP * item.ratio).toFixed(1));
+                totalF += Number((item.baseF * item.ratio).toFixed(1));
+                totalC += Number((item.baseC * item.ratio).toFixed(1));
+            });
+
+            document.getElementById('resTotalCalories').textContent = totalCal.toLocaleString();
+            document.getElementById('resTotalP').textContent = totalP.toFixed(1);
+            document.getElementById('resTotalF').textContent = totalF.toFixed(1);
+            document.getElementById('resTotalC').textContent = totalC.toFixed(1);
+
+            updatePFCChart(totalP, totalF, totalC);
+        }
+
+        function updatePFCChart(p, f, c) {
+            const ctx = document.getElementById('pfcChart').getContext('2d');
+            if (pfcChartInstance) {
+                pfcChartInstance.destroy();
+            }
+            const total = p + f + c;
+            pfcChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['P', 'F', 'C'],
+                    datasets: [{
+                        data: total > 0 ? [p * 4, f * 9, c * 4] : [1, 1, 1],
+                        backgroundColor: total > 0 ? ['#3b82f6', '#f59e0b', '#10b981'] : ['#e2e8f0', '#e2e8f0', '#e2e8f0'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: { legend: { display: false }, tooltip: { enabled: total > 0 } }
+                }
+            });
+        }
+
+        // --- Manual AI Text Estimation ---
         async function estimateManualByAI() {
             const name = document.getElementById('manualName').value.trim();
             if (!name) {
@@ -770,131 +1180,101 @@
             }
         }
 
-        // --- Display Analysis Result & Portion Adjustment ---
-        function displayAnalysisResult() {
-            if (!baseAnalysisData) return;
+        // --- Save Meals (Cloud + Local Cache) ---
+        async function persistNewRecords(newItems) {
+            allRecordsCache = [...allRecordsCache, ...newItems];
+            saveLocalRecords(allRecordsCache);
+            renderDailyView();
 
-            document.getElementById('emptyResultState').classList.add('hidden');
-            document.getElementById('resultContent').classList.remove('hidden');
-
-            document.getElementById('resMealBadge').textContent = selectedMealType;
-            document.getElementById('resDishName').value = baseAnalysisData.dish_name;
-
-            applyMultiplier(currentMultiplier);
+            if (getGasUrl()) {
+                await postToCloud({ action: 'add', records: newItems });
+            }
         }
 
-        function applyMultiplier(mult) {
-            currentMultiplier = mult;
+        async function saveAnalyzedItemsIndividually() {
+            if (detectedItems.length === 0) {
+                showError('保存する料理がありません。');
+                return;
+            }
 
-            document.querySelectorAll('.mult-btn').forEach(btn => {
-                if (Number(btn.dataset.mult) === mult) {
-                    btn.className = 'mult-btn py-1.5 rounded-lg text-xs font-bold border border-emerald-500 bg-emerald-50 text-emerald-700';
-                } else {
-                    btn.className = 'mult-btn py-1.5 rounded-lg text-xs font-semibold border border-slate-200 hover:bg-slate-50 text-slate-600';
-                }
+            const btn = document.getElementById('saveIndivBtn');
+            btn.disabled = true;
+
+            const baseNote = document.getElementById('photoContextNote').value.trim();
+            const nowIso = new Date().toISOString();
+
+            const newItems = detectedItems.map((item, idx) => {
+                const ratioNote = item.ratio !== 1.0 ? `${item.ratio}人前` : '';
+                const combinedMemo = [ratioNote, baseNote].filter(Boolean).join(' / ');
+                return {
+                    id: `${Date.now()}_${idx}`,
+                    date: selectedDate,
+                    mealType: selectedMealType,
+                    name: item.name,
+                    calories: Math.round(item.baseCal * item.ratio),
+                    protein: Number((item.baseP * item.ratio).toFixed(1)),
+                    fat: Number((item.baseF * item.ratio).toFixed(1)),
+                    carbs: Number((item.baseC * item.ratio).toFixed(1)),
+                    memo: combinedMemo,
+                    createdAt: nowIso
+                };
             });
 
-            const labels = { 0.5: '半分 (0.5倍)', 0.8: '少なめ (0.8倍)', 1: '標準 (1.0倍)', 1.2: '多め (1.2倍)', 1.5: '大盛り (1.5倍)' };
-            document.getElementById('portionLabel').textContent = labels[mult] || `${mult}倍`;
-
-            const cal = Math.round(baseAnalysisData.calories * mult);
-            const p = Number((baseAnalysisData.protein * mult).toFixed(1));
-            const f = Number((baseAnalysisData.fat * mult).toFixed(1));
-            const c = Number((baseAnalysisData.carbs * mult).toFixed(1));
-
-            document.getElementById('resCalories').textContent = cal.toLocaleString();
-            document.getElementById('resP').textContent = p;
-            document.getElementById('resF').textContent = f;
-            document.getElementById('resC').textContent = c;
-
-            const listEl = document.getElementById('resIngredientsList');
-            listEl.innerHTML = '';
-            if (baseAnalysisData.ingredients.length === 0) {
-                listEl.innerHTML = '<li class="text-slate-400">内訳情報なし</li>';
-            } else {
-                baseAnalysisData.ingredients.forEach(item => {
-                    const li = document.createElement('li');
-                    li.className = 'flex justify-between items-center py-0.5 border-b border-slate-200/50 last:border-0';
-                    li.innerHTML = `<span>${escapeHtml(item.name)}</span><span class="font-semibold text-slate-700">${Math.round((Number(item.calories) || 0) * mult)} kcal</span>`;
-                    listEl.appendChild(li);
-                });
-            }
-
-            updatePFCChart(p, f, c);
+            await persistNewRecords(newItems);
+            btn.disabled = false;
+            resetAfterSave();
         }
 
-        function updatePFCChart(p, f, c) {
-            const ctx = document.getElementById('pfcChart').getContext('2d');
-            if (pfcChartInstance) {
-                pfcChartInstance.destroy();
+        async function saveAnalyzedItemsCombined() {
+            if (detectedItems.length === 0) {
+                showError('保存する料理がありません。');
+                return;
             }
-            const total = p + f + c;
-            pfcChartInstance = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['P', 'F', 'C'],
-                    datasets: [{
-                        data: total > 0 ? [p * 4, f * 9, c * 4] : [1, 1, 1],
-                        backgroundColor: total > 0 ? ['#3b82f6', '#f59e0b', '#10b981'] : ['#e2e8f0', '#e2e8f0', '#e2e8f0'],
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    cutout: '65%',
-                    plugins: { legend: { display: false }, tooltip: { enabled: total > 0 } }
-                }
+
+            const btn = document.getElementById('saveCombBtn');
+            btn.disabled = true;
+
+            let totalCal = 0, totalP = 0, totalF = 0, totalC = 0;
+            const breakdownNames = [];
+            detectedItems.forEach(item => {
+                totalCal += Math.round(item.baseCal * item.ratio);
+                totalP += Number((item.baseP * item.ratio).toFixed(1));
+                totalF += Number((item.baseF * item.ratio).toFixed(1));
+                totalC += Number((item.baseC * item.ratio).toFixed(1));
+                breakdownNames.push(item.ratio !== 1.0 ? `${item.name}(${item.ratio}人前)` : item.name);
             });
-        }
 
-        // --- Save Meals ---
-        function getAllRecords() {
-            try {
-                return JSON.parse(localStorage.getItem(STORAGE_KEYS.RECORDS)) || [];
-            } catch {
-                return [];
-            }
-        }
+            const setTitle = document.getElementById('resSetTitle').value.trim() || breakdownNames.join('・');
+            const baseNote = document.getElementById('photoContextNote').value.trim();
+            const memoText = [breakdownNames.join(', '), baseNote].filter(Boolean).join(' / ');
 
-        function saveAllRecords(records) {
-            localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(records));
-        }
-
-        function saveAnalyzedMeal() {
-            if (!baseAnalysisData) return;
-
-            const dishName = document.getElementById('resDishName').value.trim() || baseAnalysisData.dish_name;
-            const memo = document.getElementById('photoContextNote').value.trim();
-
-            const record = {
+            const newItem = {
                 id: Date.now().toString(),
                 date: selectedDate,
                 mealType: selectedMealType,
-                name: dishName,
-                calories: Math.round(baseAnalysisData.calories * currentMultiplier),
-                protein: Number((baseAnalysisData.protein * currentMultiplier).toFixed(1)),
-                fat: Number((baseAnalysisData.fat * currentMultiplier).toFixed(1)),
-                carbs: Number((baseAnalysisData.carbs * currentMultiplier).toFixed(1)),
-                memo: memo,
-                thumbnail: currentThumbnailBase64 || null,
+                name: setTitle,
+                calories: totalCal,
+                protein: Number(totalP.toFixed(1)),
+                fat: Number(totalF.toFixed(1)),
+                carbs: Number(totalC.toFixed(1)),
+                memo: memoText,
                 createdAt: new Date().toISOString()
             };
 
-            const records = getAllRecords();
-            records.push(record);
-            saveAllRecords(records);
+            await persistNewRecords([newItem]);
+            btn.disabled = false;
+            resetAfterSave();
+        }
 
+        function resetAfterSave() {
             document.getElementById('resultContent').classList.add('hidden');
             document.getElementById('emptyResultState').classList.remove('hidden');
             document.getElementById('photoContextNote').value = '';
             clearImage();
-            baseAnalysisData = null;
-
-            renderDailyView();
+            detectedItems = [];
         }
 
-        function saveManualMeal() {
+        async function saveManualMeal() {
             hideError();
             const name = document.getElementById('manualName').value.trim();
             const calVal = document.getElementById('manualCal').value;
@@ -908,6 +1288,9 @@
                 return;
             }
 
+            const btn = document.getElementById('saveManualBtn');
+            btn.disabled = true;
+
             const record = {
                 id: Date.now().toString(),
                 date: selectedDate,
@@ -918,13 +1301,11 @@
                 fat: Number((Number(document.getElementById('manualF').value) || 0).toFixed(1)),
                 carbs: Number((Number(document.getElementById('manualC').value) || 0).toFixed(1)),
                 memo: document.getElementById('manualMemo').value.trim(),
-                thumbnail: null,
                 createdAt: new Date().toISOString()
             };
 
-            const records = getAllRecords();
-            records.push(record);
-            saveAllRecords(records);
+            await persistNewRecords([record]);
+            btn.disabled = false;
 
             document.getElementById('manualName').value = '';
             document.getElementById('manualCal').value = '';
@@ -932,14 +1313,11 @@
             document.getElementById('manualF').value = '';
             document.getElementById('manualC').value = '';
             document.getElementById('manualMemo').value = '';
-
-            renderDailyView();
         }
 
         // --- Render Daily Dashboard & History ---
         function renderDailyView() {
-            const allRecords = getAllRecords();
-            const dayRecords = allRecords.filter(r => r.date === selectedDate);
+            const dayRecords = allRecordsCache.filter(r => r.date === selectedDate);
 
             const mealOrder = { '朝食': 1, '昼食': 2, '夕食': 3, '間食': 4 };
             dayRecords.sort((a, b) => (mealOrder[a.mealType] || 9) - (mealOrder[b.mealType] || 9));
@@ -1000,16 +1378,11 @@
 
             dayRecords.forEach(item => {
                 const card = document.createElement('div');
-                card.className = 'flex items-center gap-3 p-3 rounded-xl border border-slate-200/90 bg-slate-50/50 hover:bg-white transition';
-
-                const thumbHTML = item.thumbnail
-                    ? `<img src="data:image/jpeg;base64,${item.thumbnail}" class="w-16 h-16 rounded-lg object-cover shrink-0 border border-slate-200" alt="">`
-                    : `<div class="w-16 h-16 rounded-lg bg-slate-200/70 text-slate-400 flex items-center justify-center shrink-0"><i data-lucide="utensils" class="w-6 h-6"></i></div>`;
+                card.className = 'flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200/90 bg-slate-50/50 hover:bg-white transition';
 
                 const badgeClass = badgeColors[item.mealType] || 'bg-slate-200 text-slate-700';
 
                 card.innerHTML = `
-                    ${thumbHTML}
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-1.5 mb-0.5">
                             <span class="px-2 py-0.5 rounded text-[10px] font-bold ${badgeClass}">${escapeHtml(item.mealType)}</span>
@@ -1021,7 +1394,7 @@
                         </div>
                         ${item.memo ? `<p class="text-[11px] text-slate-500 truncate mt-0.5">${escapeHtml(item.memo)}</p>` : ''}
                     </div>
-                    <div class="flex flex-col sm:flex-row gap-1.5 shrink-0">
+                    <div class="flex gap-1.5 shrink-0">
                         <button onclick="openEditModal('${item.id}')" class="p-2 rounded-lg bg-white border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 text-slate-600 hover:text-emerald-700 transition" title="編集">
                             <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
                         </button>
@@ -1036,10 +1409,9 @@
             lucide.createIcons();
         }
 
-        // --- Edit & Delete Records ---
+        // --- Edit & Delete Saved Records ---
         function openEditModal(id) {
-            const records = getAllRecords();
-            const item = records.find(r => r.id === id);
+            const item = allRecordsCache.find(r => String(r.id) === String(id));
             if (!item) return;
 
             document.getElementById('editRecordId').value = item.id;
@@ -1055,19 +1427,30 @@
             document.getElementById('editModal').classList.remove('hidden');
         }
 
+        function scaleEditValues(factor) {
+            const calEl = document.getElementById('editCal');
+            const pEl = document.getElementById('editP');
+            const fEl = document.getElementById('editF');
+            const cEl = document.getElementById('editC');
+
+            calEl.value = Math.round((Number(calEl.value) || 0) * factor);
+            pEl.value = ((Number(pEl.value) || 0) * factor).toFixed(1);
+            fEl.value = ((Number(fEl.value) || 0) * factor).toFixed(1);
+            cEl.value = ((Number(cEl.value) || 0) * factor).toFixed(1);
+        }
+
         function closeEditModal() {
             document.getElementById('editModal').classList.add('hidden');
         }
 
-        function saveEditedMeal() {
+        async function saveEditedMeal() {
             const id = document.getElementById('editRecordId').value;
-            const records = getAllRecords();
-            const idx = records.findIndex(r => r.id === id);
+            const idx = allRecordsCache.findIndex(r => String(r.id) === String(id));
             if (idx === -1) return;
 
-            records[idx] = {
-                ...records[idx],
-                date: document.getElementById('editDate').value || records[idx].date,
+            const updated = {
+                ...allRecordsCache[idx],
+                date: document.getElementById('editDate').value || allRecordsCache[idx].date,
                 mealType: document.getElementById('editMealType').value,
                 name: document.getElementById('editName').value.trim() || '名称未設定',
                 calories: Math.round(Number(document.getElementById('editCal').value) || 0),
@@ -1077,20 +1460,30 @@
                 memo: document.getElementById('editMemo').value.trim()
             };
 
-            saveAllRecords(records);
+            allRecordsCache[idx] = updated;
+            saveLocalRecords(allRecordsCache);
             closeEditModal();
             renderDailyView();
+
+            if (getGasUrl()) {
+                await postToCloud({ action: 'update', record: updated });
+            }
         }
 
-        function deleteRecord(id) {
+        async function deleteRecord(id) {
             if (!confirm('この食事記録を削除しますか？')) return;
-            const records = getAllRecords().filter(r => r.id !== id);
-            saveAllRecords(records);
+            allRecordsCache = allRecordsCache.filter(r => String(r.id) !== String(id));
+            saveLocalRecords(allRecordsCache);
             renderDailyView();
+
+            if (getGasUrl()) {
+                await postToCloud({ action: 'delete', id: String(id) });
+            }
         }
 
         // --- Settings & Model Persistence ---
         function openSettingsModal() {
+            document.getElementById('gasUrlInput').value = getGasUrl();
             document.getElementById('apiKeyInput').value = localStorage.getItem(STORAGE_KEYS.API_KEY) || '';
             document.getElementById('goalCalInput').value = localStorage.getItem(STORAGE_KEYS.GOAL_CAL) || 2000;
 
@@ -1110,6 +1503,7 @@
             }
 
             document.getElementById('settingsModal').classList.remove('hidden');
+            lucide.createIcons();
         }
 
         function closeSettingsModal() {
@@ -1126,7 +1520,14 @@
             }
         }
 
-        function saveSettings() {
+        async function saveSettings() {
+            const gasUrl = document.getElementById('gasUrlInput').value.trim();
+            if (gasUrl) {
+                localStorage.setItem(STORAGE_KEYS.GAS_URL, gasUrl);
+            } else {
+                localStorage.removeItem(STORAGE_KEYS.GAS_URL);
+            }
+
             const apiKey = document.getElementById('apiKeyInput').value.trim();
             if (apiKey) {
                 localStorage.setItem(STORAGE_KEYS.API_KEY, apiKey);
@@ -1151,6 +1552,12 @@
 
             closeSettingsModal();
             renderDailyView();
+
+            if (gasUrl) {
+                await syncFromCloud(true);
+            } else {
+                setSyncBadge('unconfigured');
+            }
         }
 
         async function fetchAvailableModels() {
@@ -1227,7 +1634,7 @@
             const payload = {
                 exportedAt: new Date().toISOString(),
                 goalCal: localStorage.getItem(STORAGE_KEYS.GOAL_CAL) || 2000,
-                records: getAllRecords()
+                records: allRecordsCache
             };
             const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -1238,18 +1645,23 @@
             URL.revokeObjectURL(url);
         }
 
-        function importData(event) {
+        async function importData(event) {
             const file = event.target.files[0];
             if (!file) return;
             const reader = new FileReader();
-            reader.onload = function(e) {
+            reader.onload = async function(e) {
                 try {
                     const data = JSON.parse(e.target.result);
                     if (Array.isArray(data.records)) {
-                        saveAllRecords(data.records);
+                        const cleaned = data.records.map(({ thumbnail, ...rest }) => rest);
+                        allRecordsCache = cleaned;
+                        saveLocalRecords(allRecordsCache);
                         if (data.goalCal) localStorage.setItem(STORAGE_KEYS.GOAL_CAL, data.goalCal);
                         renderDailyView();
-                        alert(`${data.records.length}件の食事記録を復元しました。`);
+                        if (getGasUrl()) {
+                            await postToCloud({ action: 'add', records: cleaned });
+                        }
+                        alert(`${cleaned.length}件の食事記録を復元しました。`);
                         closeSettingsModal();
                     } else {
                         alert('無効なバックアップファイルです。');
@@ -1277,7 +1689,7 @@
             } else {
                 btn.disabled = false;
                 loadingEl.classList.add('hidden');
-                if (!baseAnalysisData) {
+                if (detectedItems.length === 0) {
                     emptyEl.classList.remove('hidden');
                 }
             }
