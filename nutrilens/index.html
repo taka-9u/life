@@ -551,6 +551,31 @@
         let allRecordsCache = [];
         let pfcChartInstance = null;
 
+        // --- Date Normalization Helper (Fixes 2026/11/28 vs 2026-11-28 mismatch) ---
+        function normalizeDateStr(val) {
+            if (!val) return '';
+            // If ISO timestamp string like 2026-11-28T00:00:00.000Z, convert in local JST
+            const s = String(val).trim();
+            if (s.includes('T')) {
+                const dt = new Date(s);
+                if (!isNaN(dt.getTime())) {
+                    const y = dt.getFullYear();
+                    const m = String(dt.getMonth() + 1).padStart(2, '0');
+                    const d = String(dt.getDate()).padStart(2, '0');
+                    return `${y}-${m}-${d}`;
+                }
+            }
+            // Replace slashes with hyphens and pad month/day (e.g. 2026/11/8 -> 2026-11-08)
+            const parts = s.split(' ')[0].replace(/\//g, '-').split('-');
+            if (parts.length === 3) {
+                const y = parts[0].padStart(4, '0');
+                const m = parts[1].padStart(2, '0');
+                const d = parts[2].padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+            return s;
+        }
+
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', async () => {
             lucide.createIcons();
@@ -565,7 +590,10 @@
             restoreFetchedModelOptions();
             cleanLegacyLocalThumbnails();
 
-            allRecordsCache = getLocalRecords();
+            allRecordsCache = getLocalRecords().map(r => ({
+                ...r,
+                date: normalizeDateStr(r.date)
+            }));
             renderDailyView();
 
             await syncFromCloud(false);
@@ -653,13 +681,18 @@
 
             setSyncBadge('syncing', '読込中...');
             try {
-                const res = await fetch(gasUrl, { method: 'GET' });
+                // Add cache-busting query param so Safari never returns stale GET response
+                const sep = gasUrl.includes('?') ? '&' : '?';
+                const res = await fetch(`${gasUrl}${sep}t=${Date.now()}`, { method: 'GET' });
                 const data = await res.json();
                 if (data.status === 'ok' && Array.isArray(data.records)) {
-                    allRecordsCache = data.records;
+                    allRecordsCache = data.records.map(r => ({
+                        ...r,
+                        date: normalizeDateStr(r.date)
+                    }));
                     saveLocalRecords(allRecordsCache);
                     renderDailyView();
-                    setSyncBadge('synced', 'シート同期済');
+                    setSyncBadge('synced', `シート同期済 (${allRecordsCache.length}件)`);
                 } else {
                     throw new Error(data.message || 'データの取得に失敗しました');
                 }
@@ -686,7 +719,7 @@
                 if (data.status !== 'ok') {
                     throw new Error(data.message || 'スプレッドシートへの書き込みに失敗しました');
                 }
-                setSyncBadge('synced', 'シート同期済');
+                setSyncBadge('synced', `シート同期済 (${allRecordsCache.length}件)`);
                 return true;
             } catch (err) {
                 setSyncBadge('error');
@@ -703,7 +736,10 @@
             }
             localStorage.setItem(STORAGE_KEYS.GAS_URL, gasUrl);
 
-            const localItems = getLocalRecords();
+            const localItems = getLocalRecords().map(r => ({
+                ...r,
+                date: normalizeDateStr(r.date)
+            }));
             if (localItems.length === 0) {
                 alert('ブラウザ内に移行対象の記録がありません。');
                 return;
@@ -739,7 +775,10 @@
 
         function saveLocalRecords(records) {
             try {
-                const slim = records.map(({ thumbnail, ...rest }) => rest);
+                const slim = records.map(({ thumbnail, ...rest }) => ({
+                    ...rest,
+                    date: normalizeDateStr(rest.date)
+                }));
                 localStorage.setItem(STORAGE_KEYS.RECORDS, JSON.stringify(slim));
             } catch (e) {
                 console.warn('Local cache save skipped:', e);
@@ -768,7 +807,7 @@
         function onDateChange() {
             const val = document.getElementById('currentDateInput').value;
             if (val) {
-                selectedDate = val;
+                selectedDate = normalizeDateStr(val);
                 renderDailyView();
             }
         }
@@ -1208,7 +1247,7 @@
                 const combinedMemo = [ratioNote, baseNote].filter(Boolean).join(' / ');
                 return {
                     id: `${Date.now()}_${idx}`,
-                    date: selectedDate,
+                    date: normalizeDateStr(selectedDate),
                     mealType: selectedMealType,
                     name: item.name,
                     calories: Math.round(item.baseCal * item.ratio),
@@ -1250,7 +1289,7 @@
 
             const newItem = {
                 id: Date.now().toString(),
-                date: selectedDate,
+                date: normalizeDateStr(selectedDate),
                 mealType: selectedMealType,
                 name: setTitle,
                 calories: totalCal,
@@ -1293,7 +1332,7 @@
 
             const record = {
                 id: Date.now().toString(),
-                date: selectedDate,
+                date: normalizeDateStr(selectedDate),
                 mealType: selectedMealType,
                 name: name,
                 calories: Math.round(Number(calVal)),
@@ -1317,7 +1356,8 @@
 
         // --- Render Daily Dashboard & History ---
         function renderDailyView() {
-            const dayRecords = allRecordsCache.filter(r => r.date === selectedDate);
+            const targetDate = normalizeDateStr(selectedDate);
+            const dayRecords = allRecordsCache.filter(r => normalizeDateStr(r.date) === targetDate);
 
             const mealOrder = { '朝食': 1, '昼食': 2, '夕食': 3, '間食': 4 };
             dayRecords.sort((a, b) => (mealOrder[a.mealType] || 9) - (mealOrder[b.mealType] || 9));
@@ -1354,8 +1394,8 @@
                 remBadge.className = 'text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-50 text-rose-700';
             }
 
-            const isToday = selectedDate === getTodayString();
-            document.getElementById('historySectionTitle').textContent = isToday ? '本日の食事記録' : `${selectedDate} の食事記録`;
+            const isToday = targetDate === getTodayString();
+            document.getElementById('historySectionTitle').textContent = isToday ? '本日の食事記録' : `${targetDate} の食事記録`;
             document.getElementById('historyCountBadge').textContent = `${dayRecords.length}件`;
 
             const listContainer = document.getElementById('mealHistoryList');
@@ -1415,7 +1455,7 @@
             if (!item) return;
 
             document.getElementById('editRecordId').value = item.id;
-            document.getElementById('editDate').value = item.date;
+            document.getElementById('editDate').value = normalizeDateStr(item.date);
             document.getElementById('editMealType').value = item.mealType;
             document.getElementById('editName').value = item.name;
             document.getElementById('editCal').value = item.calories;
@@ -1450,7 +1490,7 @@
 
             const updated = {
                 ...allRecordsCache[idx],
-                date: document.getElementById('editDate').value || allRecordsCache[idx].date,
+                date: normalizeDateStr(document.getElementById('editDate').value || allRecordsCache[idx].date),
                 mealType: document.getElementById('editMealType').value,
                 name: document.getElementById('editName').value.trim() || '名称未設定',
                 calories: Math.round(Number(document.getElementById('editCal').value) || 0),
@@ -1653,7 +1693,10 @@
                 try {
                     const data = JSON.parse(e.target.result);
                     if (Array.isArray(data.records)) {
-                        const cleaned = data.records.map(({ thumbnail, ...rest }) => rest);
+                        const cleaned = data.records.map(({ thumbnail, ...rest }) => ({
+                            ...rest,
+                            date: normalizeDateStr(rest.date)
+                        }));
                         allRecordsCache = cleaned;
                         saveLocalRecords(allRecordsCache);
                         if (data.goalCal) localStorage.setItem(STORAGE_KEYS.GOAL_CAL, data.goalCal);
