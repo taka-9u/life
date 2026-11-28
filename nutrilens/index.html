@@ -85,7 +85,7 @@
                 <i data-lucide="cloud-off" class="w-5 h-5 text-amber-600 shrink-0"></i>
                 <div>
                     <p class="font-bold">Googleスプレッドシート連携が未設定です</p>
-                    <p class="text-amber-700 mt-0.5">現在はブラウザ内に一時保存されています。「API・設定」からウェブアプリURLを登録すると全端末で永続同期されます。</p>
+                    <p class="text-amber-700 mt-0.5">現在はブラウザ内に一時保存されています。「API・設定」からウェブアプリURLを登録すると写真・記録が永続同期されます。</p>
                 </div>
             </div>
             <button onclick="openSettingsModal()" class="px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-bold shrink-0 hover:bg-amber-700">
@@ -173,7 +173,7 @@
                             </div>
                             <div class="text-xs text-slate-500">
                                 <p class="font-semibold text-slate-700 text-sm">食事の写真を撮影または選択</p>
-                                <p class="mt-0.5">複数の料理が写っていても品目ごとに自動分割します</p>
+                                <p class="mt-0.5">写真はGoogleドライブ（NutriLens_Photos）に自動保存されます</p>
                             </div>
                         </div>
 
@@ -336,11 +336,11 @@
 
                     <!-- Save Buttons -->
                     <div class="space-y-2 pt-1">
-                        <button type="button" id="saveIndivBtn" onclick="saveAnalyzedItemsIndividually()" class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition">
+                        <button type="button" id="saveIndivBtn" onclick="saveAnalyzedItemsIndividually()" class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white font-bold text-sm shadow-sm flex items-center justify-center gap-2 transition">
                             <i data-lucide="list-checks" class="w-4 h-4"></i>
-                            <span>料理ごとに分けて記録に保存する（おすすめ）</span>
+                            <span>料理ごとに分けて記録・写真を保存する</span>
                         </button>
-                        <button type="button" id="saveCombBtn" onclick="saveAnalyzedItemsCombined()" class="w-full py-2 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition">
+                        <button type="button" id="saveCombBtn" onclick="saveAnalyzedItemsCombined()" class="w-full py-2 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:bg-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 transition">
                             <i data-lucide="package" class="w-3.5 h-3.5"></i>
                             <span>全体を1つのセットとしてまとめて保存する</span>
                         </button>
@@ -363,6 +363,17 @@
         </section>
 
     </main>
+
+    <!-- PHOTO LIGHTBOX MODAL -->
+    <div id="photoLightboxModal" onclick="closePhotoLightbox()" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="relative max-w-2xl w-full flex flex-col items-center" onclick="event.stopPropagation()">
+            <button onclick="closePhotoLightbox()" class="self-end mb-2 bg-white/20 hover:bg-white/30 text-white p-2 rounded-full transition">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+            <img id="lightboxImage" src="" alt="食事写真" class="max-h-[80vh] w-auto rounded-2xl shadow-2xl object-contain bg-slate-900">
+            <p id="lightboxCaption" class="text-white text-sm font-bold mt-3 text-center"></p>
+        </div>
+    </div>
 
     <!-- EDIT SAVED MEAL MODAL -->
     <div id="editModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -461,11 +472,11 @@
                 <div class="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2">
                     <label class="block text-xs font-bold text-emerald-900 flex items-center gap-1.5">
                         <i data-lucide="sheet" class="w-4 h-4 text-emerald-700"></i>
-                        <span>Googleスプレッドシート連携 URL（永続保存）</span>
+                        <span>Googleスプレッドシート＆ドライブ連携 URL</span>
                     </label>
                     <input type="url" id="gasUrlInput" placeholder="https://script.google.com/macros/s/....../exec" class="w-full px-3 py-2 text-xs border border-emerald-300 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
                     <p class="text-[11px] text-emerald-800 leading-relaxed">
-                        Apps Scriptで発行した「ウェブアプリURL」を入力すると、記録がGoogleスプレッドシートに自動保存され、iPhone・Mac間で完全に共有されます。
+                        食事データはGoogleスプレッドシートに、写真はGoogleドライブ（NutriLens_Photosフォルダ）に自動保存されます。
                     </p>
                     <button type="button" onclick="migrateLocalToCloud()" id="migrateBtn" class="w-full py-2 px-3 rounded-lg bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-bold flex items-center justify-center gap-1.5 transition">
                         <i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i>
@@ -551,10 +562,9 @@
         let allRecordsCache = [];
         let pfcChartInstance = null;
 
-        // --- Date Normalization Helper (Fixes 2026/11/28 vs 2026-11-28 mismatch) ---
+        // --- Date Normalization Helper ---
         function normalizeDateStr(val) {
             if (!val) return '';
-            // If ISO timestamp string like 2026-11-28T00:00:00.000Z, convert in local JST
             const s = String(val).trim();
             if (s.includes('T')) {
                 const dt = new Date(s);
@@ -565,7 +575,6 @@
                     return `${y}-${m}-${d}`;
                 }
             }
-            // Replace slashes with hyphens and pad month/day (e.g. 2026/11/8 -> 2026-11-08)
             const parts = s.split(' ')[0].replace(/\//g, '-').split('-');
             if (parts.length === 3) {
                 const y = parts[0].padStart(4, '0');
@@ -643,7 +652,7 @@
             } catch {}
         }
 
-        // --- Google Sheets Cloud Sync Functions ---
+        // --- Google Sheets & Drive Cloud Sync Functions ---
         function getGasUrl() {
             return (localStorage.getItem(STORAGE_KEYS.GAS_URL) || '').trim();
         }
@@ -681,7 +690,6 @@
 
             setSyncBadge('syncing', '読込中...');
             try {
-                // Add cache-busting query param so Safari never returns stale GET response
                 const sep = gasUrl.includes('?') ? '&' : '?';
                 const res = await fetch(`${gasUrl}${sep}t=${Date.now()}`, { method: 'GET' });
                 const data = await res.json();
@@ -706,7 +714,7 @@
 
         async function postToCloud(payload) {
             const gasUrl = getGasUrl();
-            if (!gasUrl) return false;
+            if (!gasUrl) return { ok: false };
 
             setSyncBadge('syncing', '保存中...');
             try {
@@ -720,11 +728,11 @@
                     throw new Error(data.message || 'スプレッドシートへの書き込みに失敗しました');
                 }
                 setSyncBadge('synced', `シート同期済 (${allRecordsCache.length}件)`);
-                return true;
+                return { ok: true, imageUrl: data.imageUrl || '' };
             } catch (err) {
                 setSyncBadge('error');
                 showError(`クラウド保存エラー: ${err.message}`);
-                return false;
+                return { ok: false };
             }
         }
 
@@ -753,12 +761,12 @@
             btn.disabled = true;
             btn.textContent = '移行中...';
 
-            const ok = await postToCloud({ action: 'add', records: localItems });
+            const res = await postToCloud({ action: 'add', records: localItems });
             btn.disabled = false;
             btn.innerHTML = '<i data-lucide="cloud-upload" class="w-3.5 h-3.5"></i><span>ブラウザ内の既存記録をスプレッドシートへ移行</span>';
             lucide.createIcons();
 
-            if (ok) {
+            if (res.ok) {
                 await syncFromCloud(true);
                 alert(`${localItems.length} 件の記録をスプレッドシートへ移行しました！`);
             }
@@ -1219,15 +1227,25 @@
             }
         }
 
-        // --- Save Meals (Cloud + Local Cache) ---
-        async function persistNewRecords(newItems) {
-            allRecordsCache = [...allRecordsCache, ...newItems];
+        // --- Save Meals (Cloud + Photo to Drive + Local Cache) ---
+        async function persistNewRecords(newItems, imageBase64 = null) {
+            if (getGasUrl()) {
+                const cloudRes = await postToCloud({
+                    action: 'add',
+                    records: newItems,
+                    imageBase64: imageBase64 || ''
+                });
+                const savedImageUrl = cloudRes.imageUrl || '';
+                const enrichedItems = newItems.map(item => ({
+                    ...item,
+                    imageUrl: savedImageUrl || item.imageUrl || ''
+                }));
+                allRecordsCache = [...allRecordsCache, ...enrichedItems];
+            } else {
+                allRecordsCache = [...allRecordsCache, ...newItems];
+            }
             saveLocalRecords(allRecordsCache);
             renderDailyView();
-
-            if (getGasUrl()) {
-                await postToCloud({ action: 'add', records: newItems });
-            }
         }
 
         async function saveAnalyzedItemsIndividually() {
@@ -1237,7 +1255,9 @@
             }
 
             const btn = document.getElementById('saveIndivBtn');
+            const origHTML = btn.innerHTML;
             btn.disabled = true;
+            btn.innerHTML = '<span>写真と記録を保存中...</span>';
 
             const baseNote = document.getElementById('photoContextNote').value.trim();
             const nowIso = new Date().toISOString();
@@ -1255,12 +1275,15 @@
                     fat: Number((item.baseF * item.ratio).toFixed(1)),
                     carbs: Number((item.baseC * item.ratio).toFixed(1)),
                     memo: combinedMemo,
-                    createdAt: nowIso
+                    createdAt: nowIso,
+                    imageUrl: ''
                 };
             });
 
-            await persistNewRecords(newItems);
+            await persistNewRecords(newItems, currentBase64Image);
             btn.disabled = false;
+            btn.innerHTML = origHTML;
+            lucide.createIcons();
             resetAfterSave();
         }
 
@@ -1271,7 +1294,9 @@
             }
 
             const btn = document.getElementById('saveCombBtn');
+            const origHTML = btn.innerHTML;
             btn.disabled = true;
+            btn.innerHTML = '<span>写真と記録を保存中...</span>';
 
             let totalCal = 0, totalP = 0, totalF = 0, totalC = 0;
             const breakdownNames = [];
@@ -1297,11 +1322,14 @@
                 fat: Number(totalF.toFixed(1)),
                 carbs: Number(totalC.toFixed(1)),
                 memo: memoText,
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                imageUrl: ''
             };
 
-            await persistNewRecords([newItem]);
+            await persistNewRecords([newItem], currentBase64Image);
             btn.disabled = false;
+            btn.innerHTML = origHTML;
+            lucide.createIcons();
             resetAfterSave();
         }
 
@@ -1340,10 +1368,11 @@
                 fat: Number((Number(document.getElementById('manualF').value) || 0).toFixed(1)),
                 carbs: Number((Number(document.getElementById('manualC').value) || 0).toFixed(1)),
                 memo: document.getElementById('manualMemo').value.trim(),
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                imageUrl: ''
             };
 
-            await persistNewRecords([record]);
+            await persistNewRecords([record], null);
             btn.disabled = false;
 
             document.getElementById('manualName').value = '';
@@ -1418,11 +1447,19 @@
 
             dayRecords.forEach(item => {
                 const card = document.createElement('div');
-                card.className = 'flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200/90 bg-slate-50/50 hover:bg-white transition';
+                card.className = 'flex items-center gap-3 p-3 rounded-xl border border-slate-200/90 bg-slate-50/50 hover:bg-white transition';
 
                 const badgeClass = badgeColors[item.mealType] || 'bg-slate-200 text-slate-700';
 
+                const thumbHTML = item.imageUrl
+                    ? `<button type="button" onclick="openPhotoLightbox('${escapeHtml(item.imageUrl)}', '${escapeHtml(item.name)}')" class="relative w-16 h-16 rounded-lg overflow-hidden shrink-0 border border-slate-200 group focus:outline-none" title="写真を拡大表示">
+                         <img src="${escapeHtml(item.imageUrl)}" class="w-full h-full object-cover group-hover:scale-105 transition" alt="">
+                         <span class="absolute bottom-0.5 right-0.5 bg-slate-900/60 text-white p-0.5 rounded"><i data-lucide="zoom-in" class="w-3 h-3"></i></span>
+                       </button>`
+                    : `<div class="w-16 h-16 rounded-lg bg-slate-200/70 text-slate-400 flex items-center justify-center shrink-0"><i data-lucide="utensils" class="w-6 h-6"></i></div>`;
+
                 card.innerHTML = `
+                    ${thumbHTML}
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-1.5 mb-0.5">
                             <span class="px-2 py-0.5 rounded text-[10px] font-bold ${badgeClass}">${escapeHtml(item.mealType)}</span>
@@ -1434,7 +1471,7 @@
                         </div>
                         ${item.memo ? `<p class="text-[11px] text-slate-500 truncate mt-0.5">${escapeHtml(item.memo)}</p>` : ''}
                     </div>
-                    <div class="flex gap-1.5 shrink-0">
+                    <div class="flex flex-col sm:flex-row gap-1.5 shrink-0">
                         <button onclick="openEditModal('${item.id}')" class="p-2 rounded-lg bg-white border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 text-slate-600 hover:text-emerald-700 transition" title="編集">
                             <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
                         </button>
@@ -1447,6 +1484,20 @@
             });
 
             lucide.createIcons();
+        }
+
+        // --- Lightbox Modal ---
+        function openPhotoLightbox(url, caption) {
+            if (!url) return;
+            document.getElementById('lightboxImage').src = url;
+            document.getElementById('lightboxCaption').textContent = caption || '';
+            document.getElementById('photoLightboxModal').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        function closePhotoLightbox() {
+            document.getElementById('photoLightboxModal').classList.add('hidden');
+            document.getElementById('lightboxImage').src = '';
         }
 
         // --- Edit & Delete Saved Records ---
